@@ -6,6 +6,7 @@ const {
 	Menu,
 	nativeImage,
 	shell,
+	session,
 	Tray,
 	screen,
 } = require('electron')
@@ -583,7 +584,19 @@ ipcMain.on('desktop:update-quick-entry-shortcut', (_event, shortcut) => {
 app.whenReady().then(() => {
 	zoomLevel = loadZoomLevel()
 
-	startServer(() => {
+	startServer(async port => {
+		// A worker left by an older bundle can serve assets that no longer exist.
+		try {
+			await session.defaultSession.clearStorageData({
+				origin: `http://127.0.0.1:${port}`,
+				storages: ['serviceworkers', 'cachestorage'],
+			})
+		} catch (error) {
+			console.error('Could not clear the obsolete desktop service worker', error)
+		}
+		if (process.platform === 'win32') {
+			app.setAppUserModelId('io.vikunja.desktop')
+		}
 		createMainWindow()
 		setupTray()
 

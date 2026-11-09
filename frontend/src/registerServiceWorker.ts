@@ -1,8 +1,9 @@
 import {register} from 'register-service-worker'
 
 import {getFullBaseUrl} from './helpers/getFullBaseUrl'
+import {isDesktopApp} from './helpers/desktopAuth'
 
-if (import.meta.env.PROD) {
+if (import.meta.env.PROD && !isDesktopApp() && !window.quickEntry) {
 	register(getFullBaseUrl() + 'sw.js', {
 		ready() {
 			console.log('App is being served from cache by a service worker.')
