@@ -64,6 +64,12 @@
 					{{ task.title }}
 				</RouterLink>
 			</h3>
+			<p
+				v-if="monthlyAmount"
+				class="kanban-card__monthly-amount tw:mt-1 tw:text-sm tw:font-semibold tw:tabular-nums"
+			>
+				{{ monthlyAmount }}
+			</p>
 			
 			<span
 				v-if="projectTitle"
@@ -170,6 +176,38 @@ const showLoading = useDelayedLoading(loadingInternal)
 const color = computed(() => getHexColor(props.task.hex_color))
 
 const projectList = useProjects()
+
+const ATLAS_FINANCE_PROJECT_ID = 8
+
+const monthlyAmount = computed(() => {
+	const {project_id, description} = props.task
+	const project = projectList.projects[props.projectId]
+	if (project_id !== props.projectId || project?.parent_project_id !== ATLAS_FINANCE_PROJECT_ID ||
+		!/^(0[1-9]|1[0-2])\/\d{4}$/.test(project.title) || !description) {
+		return
+	}
+
+	// Atlas stores the amount in the first paragraph. Read it as text from inert HTML.
+	const template = document.createElement('template')
+	template.innerHTML = description
+	const firstBlock = template.content.firstElementChild ?? template.content
+	for (const lineBreak of firstBlock.querySelectorAll('br')) {
+		lineBreak.replaceWith('\n')
+	}
+	const firstLine = firstBlock.textContent?.split('\n', 1)[0]?.trim() ?? ''
+	const amount = firstLine.match(
+		/^Valor do mês\s*:\s*(?:R\$\s*)?(\d{1,12}|\d{1,3}(?:\.\d{3}){1,3})(?:,(\d{1,2}))?$/i,
+	)
+	if (!amount) {
+		return
+	}
+
+	const value = Number(`${amount[1].replaceAll('.', '')}.${amount[2] ?? '0'}`)
+	return value.toLocaleString('pt-BR', {
+		style: 'currency',
+		currency: 'BRL',
+	})
+})
 
 const projectTitle = computed(() => {
 	if (props.projectId === props.task.project_id) {

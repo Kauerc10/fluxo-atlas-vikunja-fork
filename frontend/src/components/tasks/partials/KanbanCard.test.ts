@@ -6,6 +6,8 @@ import {QueryClient, VueQueryPlugin} from '@tanstack/vue-query'
 
 import {normalizeTask, type TaskResponse} from '@/client/queries/tasks'
 import {ApiError} from '@/client/problem'
+import {queryClient} from '@/client/queryClient'
+import {normalizeProject, projectKeys} from '@/client/queries/projects'
 
 const sdk = vi.hoisted(() => ({
 	patchTasksRead: vi.fn(),
@@ -74,13 +76,16 @@ const taskWithCover = normalizeTask({
 
 const errorHandler = vi.fn()
 
-function mountCard(task: TaskResponse) {
+function mountCard(task: TaskResponse, projectId = 1) {
 	const router = createRouter({
 		history: createMemoryHistory(),
 		routes: [{path: '/tasks/:id', name: 'task.detail', component: {render: () => null}}],
 	})
 	return shallowMount(KanbanCard, {
-		props: {task, projectId: 1},
+		props: {
+			task,
+			projectId,
+		},
 		global: {
 			plugins: [
 				createPinia(),
@@ -105,8 +110,61 @@ describe('KanbanCard', () => {
 	})
 
 	afterEach(() => {
+		queryClient.clear()
 		vi.unstubAllGlobals()
 		vi.useRealTimers()
+	})
+
+	it('updates the displayed amount when the monthly account description changes', async () => {
+		const project = normalizeProject({
+			id: 9,
+			parent_project_id: 8,
+			title: '11/2026',
+		})
+		queryClient.setQueryData(projectKeys.list(), {
+			projects: [project],
+			savedFilterProjects: [],
+			favoriteProject: null,
+		})
+		const task = normalizeTask({
+			id: 1,
+			project_id: 9,
+			title: 'Conta piloto',
+			description: '<p><strong>Valor do mês:</strong> R$ 1.250,00<br>Contatos: 1234</p>',
+		})
+		const wrapper = mountCard(task, 9)
+		expect(wrapper.get('.kanban-card__monthly-amount').text()).toBe('R$ 1.250,00')
+		await wrapper.setProps({task: {
+			...task,
+			done: true,
+			description: '<p>Valor do mês: 0</p>',
+		}})
+		expect(wrapper.get('.kanban-card__monthly-amount').text()).toBe('R$ 0,00')
+		await wrapper.setProps({task: {...task, description: '<p>Valor do mês: R$ [preencher]</p><p>Contatos: 1234</p>'}})
+		expect(wrapper.find('.kanban-card__monthly-amount').exists()).toBe(false)
+		await wrapper.setProps({task: {...task, description: '<p>Valor do mês: R$ 1.2.3</p>'}})
+		expect(wrapper.find('.kanban-card__monthly-amount').exists()).toBe(false)
+		wrapper.unmount()
+	})
+
+	it.each([
+		{id: 8, parent_project_id: 0, title: 'Financeiro'},
+		{id: 14, parent_project_id: 5, title: '11/2026'},
+		{id: 15, parent_project_id: 8, title: 'Referências'},
+	])('omits the amount outside a monthly finance board (project $id)', project => {
+		queryClient.setQueryData(projectKeys.list(), {
+			projects: [normalizeProject(project)],
+			savedFilterProjects: [],
+			favoriteProject: null,
+		})
+		const task = normalizeTask({
+			id: 1,
+			project_id: project.id,
+			description: '<p>Valor do mês: 100</p>',
+		})
+		const wrapper = mountCard(task, project.id)
+		expect(wrapper.find('.kanban-card__monthly-amount').exists()).toBe(false)
+		wrapper.unmount()
 	})
 
 	// The ctrl click itself is covered by e2e project-view-kanban.spec.ts, which reads the task back from the API.
